@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trend-mini-app
+  labels:
+    app: trend-mini-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: trend-mini-app
+  template:
+    metadata:
+      labels:
+        app: trend-mini-app
+    spec:
+      containers:
+      - name: trend-mini-app
+        image: mishraankit062/trend-mini-app:latest
+        ports:
+        - containerPort: 80
