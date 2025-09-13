@@ -305,53 +305,54 @@ spec:
 
 ### `Jenkinsfile`  (place in repo root)
 ```groovy
-pipeline {
-  agent any
-  environment {
-    DOCKERHUB_REPO = "your_dockerhub_username/trend"  // <-- REPLACE
-    K8S_NAMESPACE = "trend"
-    AWS_REGION = "ap-south-1"
-  }
-  options { timestamps(); disableConcurrentBuilds() }
-  stages {
-    stage('Checkout') { steps { checkout scm } }
-    stage('Docker Build') {
-      steps {
-        script { env.IMAGE_TAG = "build-${env.BUILD_NUMBER}" }
-        sh '''
-          docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} .
-          docker tag ${DOCKERHUB_REPO}:${IMAGE_TAG} ${DOCKERHUB_REPO}:latest
-        '''
-      }
-    }
-    stage('Push to DockerHub') {
-      steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-          sh '''
-            echo "$PASS" | docker login -u "$USER" --password-stdin
-            docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
-            docker push ${DOCKERHUB_REPO}:latest
-          '''
-        }
-      }
-    }
-    stage('Deploy to EKS') {
-      steps {
-        sh '''
-          kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
-          sed "s|your_dockerhub_username/trend:latest|${DOCKERHUB_REPO}:${IMAGE_TAG}|g" k8s/deployment.yaml | kubectl apply -f -
-          kubectl apply -f k8s/service.yaml
-          kubectl rollout status deploy/trend-web -n ${K8S_NAMESPACE} --timeout=120s
-        '''
-      }
-    }
-    stage('Get Service') { steps { sh 'kubectl get svc trend-lb -n ${K8S_NAMESPACE}' } }
-  }
-  post {
-    success { echo "Deployed successfully." }
-    failure { echo "Build or deploy failed." }
-  }
-}
+set -e
+
+# Vars
+APP_NAME="trend-mini"
+DOCKERHUB_USER="yours_id"
+DOCKERHUB_PASS="your_password"
+IMAGE_FULL="${DOCKERHUB_USER}/${APP_NAME}:latest"
+KUBE_NS="default"
+KUBE_DEPLOYMENT="trend-mini-app"
+
+echo "[Checkout] already done by SCM step"
+
+echo "[Docker Build]"
+docker build -t "${IMAGE_FULL}" .
+
+echo "[Docker Login]"
+echo "${DOCKERHUB_PASS}" | docker login -u "${DOCKERHUB_USER}" --password "${DOCKERHUB_PASS}"
+echo "[Docker Push]"
+docker push "${IMAGE_FULL}"
+
+set -eu
+
+EKS_CLUSTER="trend-mini-cluster"
+AWS_REGION="ap-south-1"
+KUBECONFIG_FILE="/tmp/kubeconfig_trendmini"
+
+# 0) Make sure proxies won't hijack
+unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy || true
+
+# 1) Show who we are
+echo "[AWS identity]"
+aws sts get-caller-identity
+
+# 2) (Important) IGNORE any old kubeconfig; create a fresh, isolated file
+rm -f "$KUBECONFIG_FILE"
+export KUBECONFIG="$KUBECONFIG_FILE"
+aws eks update-kubeconfig --name "$EKS_CLUSTER" --region "$AWS_REGION" --alias trend-mini
+
+# 6) Deploy
+echo -e "\n[K8s Deploy]"
+kubectl -n "${KUBE_NS}" set image deploy/${KUBE_DEPLOYMENT} ${KUBE_DEPLOYMENT}=${IMAGE_FULL} --record
+
+echo -e "\n[Rollout]"
+kubectl -n "${KUBE_NS}" rollout status deploy/${KUBE_DEPLOYMENT} --timeout=5m
+
+echo "[Cleanup]"
+docker image prune -f || true
+
 ```
 
 ---
