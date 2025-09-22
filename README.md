@@ -509,13 +509,3 @@ terraform destroy -auto-approve
 
 ---
 
-## Done — What I created for you
-All necessary files and step-by-step instructions are included above. Copy these files into your repo (structure shown at top), update placeholders, run the commands in **Section 3**, and you'll have a working CI/CD -> EKS deployment exposed on port 3000.
-
-If you want, I can now:
-- Generate the actual files inside the repository for you (one-by-one), or
-- Provide a shorter checklist & printable PDF, or
-- Add sample screenshots placeholders in README for final submission.
-
-Tell me which of the above you want next.
-
